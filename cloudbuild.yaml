@@ -1,0 +1,58 @@
+steps:
+# --- Tests ---
+- name: python
+  entrypoint: bash
+  args: ['-c', 'cd catalog && pip install -r requirements.txt -r requirements-dev.txt --user && python -m pytest']
+- name: python
+  entrypoint: bash
+  args: ['-c', 'cd payment && pip install -r requirements.txt -r requirements-dev.txt --user && python -m pytest']
+- name: python
+  entrypoint: bash
+  args: ['-c', 'cd notification && pip install -r requirements.txt -r requirements-dev.txt --user && python -m pytest']
+
+# --- Build ---
+- name: 'gcr.io/cloud-builders/docker'
+  args: ['build', '-t', '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/catalog-dummy:${_TAG}', './catalog']
+- name: 'gcr.io/cloud-builders/docker'
+  args: ['build', '-t', '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/payment-dummy:${_TAG}', './payment']
+- name: 'gcr.io/cloud-builders/docker'
+  args: ['build', '-t', '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/notification-dummy:${_TAG}', './notification']
+
+# --- Push ---
+- name: 'gcr.io/cloud-builders/docker'
+  args: ['push', '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/catalog-dummy:${_TAG}']
+- name: 'gcr.io/cloud-builders/docker'
+  args: ['push', '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/payment-dummy:${_TAG}']
+- name: 'gcr.io/cloud-builders/docker'
+  args: ['push', '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/notification-dummy:${_TAG}']
+
+# --- Deploy ---
+- name: 'gcr.io/google.com/cloudsdktool/cloud-sdk:slim'
+  entrypoint: bash
+  args:
+    - -c
+    - |
+      gcloud run deploy catalog-dummy \
+        --image ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/catalog-dummy:${_TAG} \
+        --region ${_REGION} --platform managed --allow-unauthenticated --port 8080
+
+      gcloud run deploy payment-dummy \
+        --image ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/payment-dummy:${_TAG} \
+        --region ${_REGION} --platform managed --allow-unauthenticated --port 8080
+
+      gcloud run deploy notification-dummy \
+        --image ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/notification-dummy:${_TAG} \
+        --region ${_REGION} --platform managed --allow-unauthenticated --port 8080
+
+images:
+- '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/catalog-dummy:${_TAG}'
+- '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/payment-dummy:${_TAG}'
+- '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/notification-dummy:${_TAG}'
+
+substitutions:
+  _REGION: us-central1
+  _REPO: ecommerce-repo
+  _TAG: manual
+
+options:
+  logging: CLOUD_LOGGING_ONLY
