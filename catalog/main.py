@@ -1,44 +1,82 @@
-import logging
-from flask import Flask, jsonify, request
+import pytest
+import responses
+import main
 
-app = Flask(__name__)
-logging.basicConfig(level=logging.INFO)
 
-PRODUCTS = [
-    {"product_id": "1", "name": "Wireless Mouse", "description": "A smooth wireless mouse", "price": 19.99, "categories": ["electronics", "accessories"]},
-    {"product_id": "2", "name": "Mechanical Keyboard", "description": "RGB mechanical keyboard", "price": 59.99, "categories": ["electronics", "accessories"]},
-    {"product_id": "3", "name": "Coffee Mug", "description": "Ceramic mug for coffee lovers", "price": 9.99, "categories": ["kitchen"]},
-    {"product_id": "4", "name": "Desk Lamp", "description": "LED desk lamp", "price": 24.99, "categories": ["home", "electronics"]},
-    {"product_id": "5", "name": "Notebook", "description": "Ruled paper notebook", "price": 4.99, "categories": ["office"]},
-    {"product_id": "6", "name": "Backpack", "description": "Laptop backpack", "price": 39.99, "categories": ["accessories", "travel"]},
-    {"product_id": "7", "name": "Water Bottle", "description": "Insulated steel bottle", "price": 14.99, "categories": ["kitchen", "travel"]},
-    {"product_id": "8", "name": "Headphones", "description": "Noise-cancelling headphones", "price": 89.99, "categories": ["electronics"]},
+@pytest.fixture
+def client():
+    main.app.testing = True
+    return main.app.test_client()
+
+
+CATALOG = [
+    {"product_id": "1", "name": "Mouse", "categories": ["electronics"]},
+    {"product_id": "2", "name": "Keyboard", "categories": ["electronics"]},
+    {"product_id": "3", "name": "Mug", "categories": ["kitchen"]},
+    {"product_id": "4", "name": "Lamp", "categories": ["electronics", "home"]},
+    {"product_id": "5", "name": "Notebook", "categories": ["office"]},
+    {"product_id": "6", "name": "Backpack", "categories": ["accessories"]},
 ]
 
 
-@app.route("/products")
-def list_products():
-    search = request.args.get("search", "")
-    app.logger.info("GET /products search=%r", search)
-    if not search:
-        return jsonify(PRODUCTS)
-    needle = search.lower()
-    results = [
-        p for p in PRODUCTS
-        if needle in p["name"].lower() or needle in p["description"].lower()
-    ]
-    return jsonify(results)
+@responses.activate
+def test_recommendations_excludes_cart_items(client):
+    responses.add(responses.GET, f"{main.CART_SERVICE_URL}/cart/user1",
+                   json=[{"product_id": 1, "name": "Mouse"}], status=200)
+    responses.add(responses.GET, f"{main.CATALOG_SERVICE_URL}/products",
+                   json=CATALOG, status=200)
+
+    r = client.get("/recommendations/user1")
+    assert r.status_code == 200
+    ids = [p["product_id"] for p in r.get_json()]
+    assert "1" not in ids  # already in cart, despite int vs str mismatch
 
 
-@app.route("/products/<product_id>")
-def get_product(product_id):
-    app.logger.info("GET /products/%s", product_id)
-    for p in PRODUCTS:
-        if p["product_id"] == product_id:
-            return jsonify(p)
-    return jsonify({"error": "not found"}), 404
+@responses.activate
+def test_recommendations_prefers_matching_category(client):
+    responses.add(responses.GET, f"{main.CART_SERVICE_URL}/cart/user1",
+                   json=[{"product_id": 1, "name": "Mouse"}], status=200)
+    responses.add(responses.GET, f"{main.CATALOG_SERVICE_URL}/products",
+                   json=CATALOG, status=200)
+
+    r = client.get("/recommendations/user1")
+    ids = [p["product_id"] for p in r.get_json()]
+    assert ids.index("2") < ids.index("3")
+    assert ids.index("4") < ids.index("5")
 
 
-if __name__ == "__main__":
-    import os
-    app.run(debug=True, host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
+@responses.activate
+def test_recommendations_capped_at_five(client):
+    responses.add(responses.GET, f"{main.CART_SERVICE_URL}/cart/user2",
+                   json=[], status=200)
+    responses.add(responses.GET, f"{main.CATALOG_SERVICE_URL}/products",
+                   json=CATALOG, status=200)
+
+    r = client.get("/recommendations/user2")
+    assert len(r.get_json()) <= 5
+
+
+@responses.activate
+def test_cart_service_down_returns_502(client):
+    responses.add(responses.GET, f"{main.CART_SERVICE_URL}/cart/user1", status=500)
+    r = client.get("/recommendations/user1")
+    assert r.status_code == 502
+    assert r.get_json()["error"] == "cart service unavailable"
+
+
+@responses.activate
+def test_catalog_service_down_returns_502(client):
+    responses.add(responses.GET, f"{main.CART_SERVICE_URL}/cart/user1", json=[], status=200)
+    responses.add(responses.GET, f"{main.CATALOG_SERVICE_URL}/products", status=500)
+    r = client.get("/recommendations/user1")
+    assert r.status_code == 502
+    assert r.get_json()["error"] == "catalog service unavailable"
+
+
+def test_build_recommendations_unit(client):
+    recs = main.build_recommendations(
+        cart_items=[{"product_id": 1, "name": "Mouse"}],  # int, like real Cart
+        catalog=CATALOG,  # str, like real Catalog
+    )
+    ids = [p["product_id"] for p in recs]
+    assert "1" not in ids
