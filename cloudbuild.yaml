@@ -35,14 +35,18 @@ steps:
       gcloud run deploy catalog-dummy \
         --image ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/catalog-dummy:${_TAG} \
         --region ${_REGION} --platform managed --allow-unauthenticated --port 8080
+        --set-env-vars CORS_URL=${_CORS_URL}
 
       gcloud run deploy payment-dummy \
         --image ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/payment-dummy:${_TAG} \
         --region ${_REGION} --platform managed --allow-unauthenticated --port 8080
+        --set-env-vars CORS_URL=${_CORS_URL}
 
       gcloud run deploy notification-dummy \
         --image ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/notification-dummy:${_TAG} \
         --region ${_REGION} --platform managed --allow-unauthenticated --port 8080
+        --set-env-vars CORS_URL=${_CORS_URL}
+
 
 images:
 - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/catalog-dummy:${_TAG}'
@@ -53,6 +57,7 @@ substitutions:
   _REGION: us-central1
   _REPO: ecommerce-repo
   _TAG: manual
+  _CORS_URL: https://frontend-service-887823769496.us-central1.run.app
 
 options:
   logging: CLOUD_LOGGING_ONLY
