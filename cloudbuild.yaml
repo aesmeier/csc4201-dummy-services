@@ -34,17 +34,20 @@ steps:
     - |
       gcloud run deploy catalog-dummy \
         --image ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/catalog-dummy:${_TAG} \
-        --region ${_REGION} --platform managed --allow-unauthenticated --port 8080
+        --region ${_REGION} --platform managed --allow-unauthenticated --port 8080 \
+        --service-account=logging-writer@project-mirco.iam.gserviceaccount.com \
         --set-env-vars CORS_URL=${_CORS_URL}
 
       gcloud run deploy payment-dummy \
         --image ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/payment-dummy:${_TAG} \
-        --region ${_REGION} --platform managed --allow-unauthenticated --port 8080
+        --region ${_REGION} --platform managed --allow-unauthenticated --port 8080 \
+        --service-account=logging-writer@project-mirco.iam.gserviceaccount.com \
         --set-env-vars CORS_URL=${_CORS_URL}
 
       gcloud run deploy notification-dummy \
         --image ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/notification-dummy:${_TAG} \
-        --region ${_REGION} --platform managed --allow-unauthenticated --port 8080
+        --region ${_REGION} --platform managed --allow-unauthenticated --port 8080 \
+        --service-account=logging-writer@project-mirco.iam.gserviceaccount.com \
         --set-env-vars CORS_URL=${_CORS_URL}
 
 

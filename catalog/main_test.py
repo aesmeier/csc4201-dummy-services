@@ -31,3 +31,9 @@ def test_get_single_product(client):
 def test_get_missing_product(client):
     r = client.get("/products/does-not-exist")
     assert r.status_code == 404
+
+
+def test_correlation_id_logged(client):
+    r = client.get("/products", headers={"Correlation-Id": "test-corr-123"})
+    assert r.status_code == 200
+    # logging shouldn't break the request even with a header present
